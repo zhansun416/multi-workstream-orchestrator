@@ -1,0 +1,24 @@
+tasks:
+  - id: runtime-v0-1-implementation
+    owner: manager
+    status: done
+    goal: Deliver and verify Runtime v0.1.
+    allowed_paths:
+      - src/**
+      - test/**
+      - tests/fixtures/**
+      - README.md
+      - package.json
+      - package-lock.json
+      - docs/coordination/**
+    inputs: []
+    outputs:
+      - RuntimeV0.1@v1
+    depends_on: []
+    parallel: false
+    conflicts_with: []
+    acceptance:
+      - CLI and deterministic checks are covered by tests.
+    verification:
+      - npm test
+    handoff_required: true

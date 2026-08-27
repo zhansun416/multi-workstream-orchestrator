@@ -1,0 +1,68 @@
+tasks:
+  - id: backend-01
+    owner: backend
+    status: ready
+    goal: Implement the API endpoint.
+    allowed_paths:
+      - packages/backend/**
+    inputs: []
+    outputs:
+      - BackendApi@v1
+    depends_on: []
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Endpoint responds successfully.
+    verification:
+      - Run backend test suite.
+    handoff_required: true
+  - id: docs-01
+    owner: docs
+    status: ready
+    goal: Add project documentation.
+    allowed_paths:
+      - docs/**
+    inputs: []
+    outputs: []
+    depends_on: []
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Documentation is readable.
+    verification:
+      - Manual documentation review.
+    handoff_required: true
+  - id: backend-admin-01
+    owner: admin
+    status: ready
+    goal: Change backend admin API.
+    allowed_paths:
+      - packages/backend/api/**
+    inputs: []
+    outputs: []
+    depends_on: []
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Admin API is updated.
+    verification:
+      - Run admin API test suite.
+    handoff_required: true
+  - id: frontend-01
+    owner: frontend
+    status: ready
+    goal: Use the backend endpoint.
+    allowed_paths:
+      - packages/frontend/**
+    inputs:
+      - BackendApi@v1
+    outputs: []
+    depends_on:
+      - backend-01
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - UI calls the endpoint.
+    verification:
+      - Run frontend test suite.
+    handoff_required: true

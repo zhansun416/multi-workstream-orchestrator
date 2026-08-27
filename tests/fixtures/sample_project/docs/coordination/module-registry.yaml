@@ -1,0 +1,35 @@
+modules:
+  - id: backend
+    name: Backend
+    purpose: Implement the API.
+    writable_paths:
+      - packages/backend/**
+    inputs: []
+    outputs:
+      - BackendApi@v1
+    non_goals:
+      - Frontend UI
+    validation:
+      - backend tests
+  - id: frontend
+    name: Frontend
+    purpose: Consume the backend API.
+    writable_paths:
+      - packages/frontend/**
+    inputs:
+      - BackendApi@v1
+    outputs: []
+    non_goals:
+      - Backend changes
+    validation:
+      - frontend tests
+  - id: docs
+    name: Documentation
+    purpose: Maintain usage documentation.
+    writable_paths:
+      - docs/**
+    inputs: []
+    outputs: []
+    non_goals: []
+    validation:
+      - manual review

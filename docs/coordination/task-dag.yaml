@@ -1,0 +1,81 @@
+tasks:
+  - id: runtime-foundation
+    owner: runtime-core
+    status: done
+    goal: Load and validate the v0.1 task DAG schema.
+    allowed_paths:
+      - src/loader.js
+      - src/errors.js
+    inputs: []
+    outputs:
+      - ValidatedTaskDag@v1
+    depends_on: []
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Invalid IDs and dependency graphs fail explicitly.
+    verification:
+      - npm test
+    handoff_required: true
+  - id: runtime-scheduler
+    owner: runtime-scheduling
+    status: done
+    goal: Compute ready work and safe waves without LLM DAG decisions.
+    allowed_paths:
+      - src/scheduler.js
+      - src/conflicts.js
+    inputs:
+      - ValidatedTaskDag@v1
+    outputs:
+      - ExecutionWave@v1
+    depends_on:
+      - runtime-foundation
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Parent and child paths conflict.
+    verification:
+      - npm test
+    handoff_required: true
+  - id: runtime-workflow
+    owner: runtime-workflow
+    status: done
+    goal: Enforce state transitions and handoff completeness.
+    allowed_paths:
+      - src/state.js
+      - src/handoff.js
+    inputs:
+      - ValidatedTaskDag@v1
+    outputs:
+      - HandoffValidation@v1
+    depends_on:
+      - runtime-foundation
+    parallel: true
+    conflicts_with: []
+    acceptance:
+      - Block provenance is retained.
+    verification:
+      - npm test
+    handoff_required: true
+  - id: runtime-context-cli
+    owner: runtime-context-cli
+    status: done
+    goal: Produce bounded role context and expose it through the CLI.
+    allowed_paths:
+      - src/context.js
+      - src/cli.js
+    inputs:
+      - ValidatedTaskDag@v1
+      - HandoffValidation@v1
+    outputs:
+      - RoleContext@v1
+    depends_on:
+      - runtime-foundation
+      - runtime-workflow
+    parallel: false
+    conflicts_with: []
+    acceptance:
+      - Critical worker fields survive budget pressure.
+    verification:
+      - npm test
+    handoff_required: true

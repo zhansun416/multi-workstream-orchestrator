@@ -1,0 +1,5 @@
+context_budget:
+  manager: 12000
+  worker: 8000
+  reviewer: 10000
+contracts: []

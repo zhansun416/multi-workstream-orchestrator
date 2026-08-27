@@ -1,0 +1,75 @@
+modules:
+  - id: runtime-core
+    name: Runtime core
+    purpose: Load and validate the coordination schema and expose durable task models.
+    owner_window: manager
+    writable_paths:
+      - src/loader.js
+      - src/errors.js
+    inputs:
+      - TaskDag@v1
+    outputs:
+      - ValidatedTaskDag@v1
+    dependencies: []
+    non_goals:
+      - YAML comment round-tripping
+    validation:
+      - schema unit tests
+    status: active
+  - id: runtime-scheduling
+    name: Runtime scheduling
+    purpose: Compute task views, path conflicts, and safe declaration-ordered execution waves.
+    owner_window: manager
+    writable_paths:
+      - src/scheduler.js
+      - src/conflicts.js
+    inputs:
+      - ValidatedTaskDag@v1
+    outputs:
+      - ExecutionWave@v1
+    dependencies:
+      - runtime-core
+    non_goals:
+      - priority selection
+    validation:
+      - scheduler and conflict unit tests
+    status: active
+  - id: runtime-workflow
+    name: Runtime workflow validation
+    purpose: Enforce legal state transitions and deterministic handoff completeness.
+    owner_window: manager
+    writable_paths:
+      - src/state.js
+      - src/handoff.js
+    inputs:
+      - ValidatedTaskDag@v1
+    outputs:
+      - TransitionResult@v1
+      - HandoffValidation@v1
+    dependencies:
+      - runtime-core
+    non_goals:
+      - code-quality review
+    validation:
+      - state and handoff unit tests
+    status: active
+  - id: runtime-context-cli
+    name: Runtime context and CLI
+    purpose: Build bounded role-specific context and expose the local command interface.
+    owner_window: manager
+    writable_paths:
+      - src/context.js
+      - src/cli.js
+    inputs:
+      - ValidatedTaskDag@v1
+      - HandoffValidation@v1
+    outputs:
+      - RoleContext@v1
+    dependencies:
+      - runtime-core
+      - runtime-workflow
+    non_goals:
+      - Agent launch or model routing
+    validation:
+      - context and CLI unit tests
+    status: active

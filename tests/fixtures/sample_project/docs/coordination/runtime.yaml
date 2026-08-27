@@ -1,0 +1,9 @@
+context_budget:
+  manager: 12000
+  worker: 8000
+  reviewer: 10000
+contracts:
+  - id: BackendApi
+    version: v1
+    path: docs/contracts/backend-api.md
+    summary: Backend API contract.
