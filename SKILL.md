@@ -53,7 +53,7 @@ Roles:
 3. Create a Worker only when its module has stable responsibility, continuing work, a clear writable scope, defined inputs/outputs, and independently testable acceptance criteria.
 4. A Worker may not modify another Worker's files, the module registry, or shared contracts. It must submit a change request to the Manager instead.
 5. Do not parallelize tasks that share a writable directory, shared schema, public interface, or unresolved upstream dependency.
-6. A task is not complete until it includes reproducible validation evidence and a handoff; a verbal completion claim is insufficient.
+6. A formal Worker task is not complete until it includes reproducible validation evidence and a handoff; a verbal completion claim is insufficient. Only a lightweight/Fast Path task that explicitly sets `handoff_required: false` may omit a handoff, while still recording its validation evidence in the task card.
 7. Treat project files as the source of truth. Chat history is supporting context only.
 8. Use Git/worktrees before simultaneous code writes in multiple windows. Without isolation, allow only one writer in a shared working directory.
 
@@ -167,9 +167,10 @@ When assigning a ready task, the Manager sends its task card and relevant contra
 2. Write a concise local implementation plan before changing code.
 3. Implement only inside the allowed scope.
 4. Run the specified automated, visual, fixture, or manual checks.
-5. Use `handoff validate <task-id>` when Runtime is available; it checks structure, declared evidence, and allowed paths, not semantic correctness.
-6. Review first for specification compliance, then for implementation quality.
-7. Write a handoff using the template and report `handoff` or `blocked`.
+5. Review first for specification compliance, then for implementation quality.
+6. Write a handoff using the template.
+7. Use `handoff validate <task-id>` when Runtime is available; it checks structure, declared evidence, and allowed paths, not semantic correctness.
+8. Report `handoff` or `blocked`.
 
 Workers do not choose project priority, expand scope, or silently alter shared contracts.
 
