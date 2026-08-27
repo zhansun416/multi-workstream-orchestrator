@@ -1,6 +1,6 @@
 # Multi-Workstream Orchestrator
 
-MSO is a governance workflow for substantial multi-module work. Runtime v0.1 is its intentionally small, local implementation aid.
+MSO is a governance workflow for substantial multi-module work. Runtime v0.1.1 is its intentionally small, local implementation aid.
 
 ```text
 Skill   = Policy
@@ -11,10 +11,10 @@ Agent   = Intelligent Worker
 ## What each layer does
 
 - The [MSO Skill](SKILL.md) defines governance: Manager ownership, module boundaries, task handoffs, validation, and acceptance.
-- **Runtime v0.1** deterministically reads and checks project coordination files: task dependencies, task state, execution conflicts, handoff completeness, and bounded context assembly.
+- **Runtime v0.1.1** deterministically reads and checks project coordination files: task dependencies, task state, execution conflicts, handoff completeness, and bounded context assembly. When available, the MSO Manager uses it first for these mechanical checks.
 - **Agents** make the decisions Runtime must not make: project interpretation, architecture, priorities, contracts, risk, worker creation, design changes, and final acceptance.
 
-Runtime v0.1 does **not** start Agents, call model APIs, create worktrees, execute arbitrary shell commands, modify Git, merge work, run a service, or provide a web UI.
+Runtime v0.1.1 does **not** start Agents, call model APIs, create worktrees, execute arbitrary shell commands, modify Git, merge work, run a service, or provide a web UI.
 
 ## Requirements and install
 
@@ -36,9 +36,11 @@ draft → ready → assigned → in_progress → handoff → review → done
                               ↘ blocked → ready
 ```
 
-When a task enters `blocked`, Runtime stores `blocked_from` in its task record. In v0.1, unblocking always returns it to `ready`, while retaining that provenance as the future extension point for a policy that restores the prior state.
+When a task enters `blocked`, Runtime stores `blocked_from` in its task record. In v0.1.1, unblocking always returns it to `ready` and clears the resolved `blocker`, while retaining provenance as the future extension point for a policy that restores the prior state.
 
 `parallel: true` permits a task to share a wave only after dependency, explicit-conflict, writable-path, and owner checks pass. `parallel: false` produces a single-task wave according to declaration order, which is the Manager's priority order.
+
+`conflicts_with` entries must name existing, distinct task IDs. Recommended `allowed_paths` forms are conservative directory scopes such as `src/**`, `packages/backend/**`, and `docs/**`. Runtime v0.1.1 does not claim support for broad `**`, filename-only patterns such as `*.md`, brace expansion, or complex glob semantics.
 
 ## CLI
 
@@ -57,7 +59,7 @@ node src/cli.js transition <task-id> handoff
 node src/cli.js --root ../another-project --json status
 ```
 
-The CLI emits JSON in v0.1, making it usable by both people and future tool callers.
+The CLI emits JSON by default in v0.1.1, making it usable by both people and future tool callers. `--json` remains an accepted no-op compatibility flag; no human-readable formatter is provided.
 
 ## Context Builder
 
@@ -73,7 +75,9 @@ The validator checks headings, task identity, changed-file scope, verification d
 2. **Reference-valid:** each item is a safe relative path, an HTTPS/HTTP URL, or `manual: <description>`.
 3. **Entity-file exists:** only declared local file references are checked for an existing regular file.
 
-Manual checks and external URLs are valid evidence types; they do not require a local file. URLs are not fetched in v0.1.
+Manual checks and external URLs are valid evidence types; they do not require a local file. URLs are not fetched in v0.1.1.
+
+For a task with `handoff_required: true`, the `handoff → review` transition automatically runs this structural validation and rejects invalid handoffs. With `handoff_required: false`, the transition proceeds without the gate. Runtime never accepts work on this basis; the Manager still decides whether `review → done` is warranted.
 
 ## Development
 

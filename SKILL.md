@@ -9,6 +9,26 @@ MSO is a reusable project workflow, not a domain skill. It turns a new complex p
 
 The objective is **visible, verified delivery with clear ownership**, not maximum agent or window count.
 
+## Runtime-assisted operation
+
+MSO works with or without the optional local Runtime. When Runtime is available, the Manager uses it first for deterministic coordination work:
+
+```text
+status
+ready
+wave
+task
+context
+handoff validate
+transition
+```
+
+Runtime, not LLM reasoning, determines whether declared dependencies are satisfied, which tasks are ready, explicit or writable-path conflicts, a declaration-ordered safe execution wave, legal state transitions, and handoff structural completeness. The Manager still decides project intent, architecture, modules, shared contracts, priority, risk, Worker creation, design changes, semantic review, and final acceptance.
+
+`docs/coordination/task-dag.yaml` is the persisted task-status source of truth. `docs/coordination/STATE.md` is a human-readable project summary, not a second task state machine.
+
+If Runtime is unavailable, the Manager performs the same checks manually and records the result in the coordination files. Runtime is an accelerator, never a prerequisite for using MSO.
+
 ## Operating model
 
 ```text
@@ -137,6 +157,8 @@ draft → ready → assigned → in_progress → handoff → review → done
 
 The Manager constructs implementation waves from `depends_on`, `parallel`, and `conflicts_with`. Prefer a small number of ready tasks over waking every Worker.
 
+When Runtime is available, use its `status`, `ready`, `wave`, and `task` commands instead of independently reasoning through this mechanical DAG calculation.
+
 ## Phase 4 — Worker execution
 
 When assigning a ready task, the Manager sends its task card and relevant contract references. The Worker follows this cycle:
@@ -145,8 +167,9 @@ When assigning a ready task, the Manager sends its task card and relevant contra
 2. Write a concise local implementation plan before changing code.
 3. Implement only inside the allowed scope.
 4. Run the specified automated, visual, fixture, or manual checks.
-5. Review first for specification compliance, then for implementation quality.
-6. Write a handoff using the template and report `handoff` or `blocked`.
+5. Use `handoff validate <task-id>` when Runtime is available; it checks structure, declared evidence, and allowed paths, not semantic correctness.
+6. Review first for specification compliance, then for implementation quality.
+7. Write a handoff using the template and report `handoff` or `blocked`.
 
 Workers do not choose project priority, expand scope, or silently alter shared contracts.
 
@@ -160,6 +183,8 @@ The Manager:
 4. marks the change `done` only when its specification has converged;
 5. archives completed change evidence and updates `STATE.md` with decisions, risks, and the next milestone.
 
+When Runtime is available, use `transition` for task state changes. In particular, a `handoff → review` transition validates any required handoff before it proceeds. Runtime does not decide whether review passes: `review → done` remains a Manager decision.
+
 ## Keeping the workflow fast
 
 - Keep research and uncertainty resolution in the Manager window.
@@ -167,7 +192,7 @@ The Manager:
 - Work toward one small user-visible vertical result per milestone.
 - Use Fast Path for narrow work.
 - Parallelize only independent, contract-frozen work.
-- Put durable decisions and task status in `STATE.md` and the task DAG so Workers do not repeatedly need background briefings.
+- Put durable decisions and a concise task summary in `STATE.md`; keep persisted task status only in the task DAG so Workers do not repeatedly need background briefings.
 - If a task does not produce verifiable progress within its agreed timebox, the Manager reduces scope, resolves the dependency, or stops it.
 
 ## What MSO borrows—and deliberately does not require
@@ -189,4 +214,3 @@ Report succinctly:
 - completed, blocked, and next tasks;
 - verification evidence and unresolved risks;
 - links to the updated project state and change package.
-

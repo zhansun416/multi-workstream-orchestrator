@@ -68,6 +68,9 @@ export async function loadTaskDag(root = ".") {
   for (const task of tasks) {
     const missing = task.depends_on.filter((id) => !byId.has(id));
     if (missing.length) throw new DependencyError(`Task '${task.id}' depends on missing task(s): ${missing.join(", ")}`);
+    if (task.conflicts_with.includes(task.id)) throw new DependencyError(`Task '${task.id}' cannot conflict with itself.`);
+    const missingConflicts = task.conflicts_with.filter((id) => !byId.has(id));
+    if (missingConflicts.length) throw new DependencyError(`Task '${task.id}' conflicts with missing task(s): ${missingConflicts.join(", ")}`);
   }
   assertAcyclic(byId);
   return { root: resolveRoot(root), file, data, tasks, byId };

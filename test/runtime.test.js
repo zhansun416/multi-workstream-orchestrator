@@ -51,6 +51,10 @@ test("invalid missing, duplicate, and cyclic dependencies fail explicitly", asyn
   await assert.rejects(() => loadTaskDag(root), /Cyclic dependency/);
   await writeFile(file, "tasks:\n  - id: a\n    owner: x\n    status: ready\n    depends_on: []\n  - id: a\n    owner: y\n    status: ready\n    depends_on: []\n");
   await assert.rejects(() => loadTaskDag(root), /Duplicate task id/);
+  await writeFile(file, "tasks:\n  - id: a\n    owner: x\n    status: ready\n    depends_on: []\n    conflicts_with: [missing]\n");
+  await assert.rejects(() => loadTaskDag(root), /conflicts with missing/);
+  await writeFile(file, "tasks:\n  - id: a\n    owner: x\n    status: ready\n    depends_on: []\n    conflicts_with: [a]\n");
+  await assert.rejects(() => loadTaskDag(root), /cannot conflict with itself/);
 });
 
 test("state transitions reject jumps and retain blocked provenance", async () => {
@@ -61,10 +65,25 @@ test("state transitions reject jumps and retain blocked provenance", async () =>
   await updateTaskStatus(root, "backend-01", "blocked", { blocker: "fixture blocker" });
   let dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").raw.blocked_from, "in_progress");
   await updateTaskStatus(root, "backend-01", "ready");
-  dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").raw.blocked_from, "in_progress");
+  dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").raw.blocked_from, "in_progress"); assert.equal(dag.byId.get("backend-01").raw.blocker, undefined);
   await updateTaskStatus(root, "backend-01", "assigned"); await updateTaskStatus(root, "backend-01", "in_progress");
   await updateTaskStatus(root, "backend-01", "handoff"); await updateTaskStatus(root, "backend-01", "review"); await updateTaskStatus(root, "backend-01", "done");
   dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").status, "done");
+});
+
+test("handoff to review is gated only when the task requires a handoff", async () => {
+  const invalidRoot = await copiedFixture();
+  await updateTaskStatus(invalidRoot, "backend-01", "assigned"); await updateTaskStatus(invalidRoot, "backend-01", "in_progress"); await updateTaskStatus(invalidRoot, "backend-01", "handoff");
+  const invalidHandoff = path.join(invalidRoot, "docs", "coordination", "handoffs", "backend-01.md");
+  await writeFile(invalidHandoff, "# Handoff: backend-01\n\n## Result\n\nIncomplete\n");
+  await assert.rejects(() => updateTaskStatus(invalidRoot, "backend-01", "review"), /Handoff validation failed/);
+
+  const optionalRoot = await copiedFixture(); const dagFile = path.join(optionalRoot, "docs", "coordination", "task-dag.yaml");
+  await writeFile(dagFile, (await readFile(dagFile, "utf8")).replace("handoff_required: true", "handoff_required: false"));
+  await updateTaskStatus(optionalRoot, "backend-01", "assigned"); await updateTaskStatus(optionalRoot, "backend-01", "in_progress"); await updateTaskStatus(optionalRoot, "backend-01", "handoff");
+  await writeFile(path.join(optionalRoot, "docs", "coordination", "handoffs", "backend-01.md"), "not a valid handoff");
+  await updateTaskStatus(optionalRoot, "backend-01", "review");
+  const dag = await loadTaskDag(optionalRoot); assert.equal(dag.byId.get("backend-01").status, "review");
 });
 
 test("handoff validation supports manual evidence and flags missing files and unauthorized changes", async () => {
@@ -89,7 +108,7 @@ test("context is role-scoped, sources carry reasons, and critical fields survive
   assert.ok(worker.included_sources.some((source) => source.reasons.includes("current_task")));
   assert.ok(worker.included_sources.some((source) => source.reasons.includes("direct_dependency")));
   const constrained = await buildWorkerContext(root, "frontend-01", 20);
-  assert.match(constrained.context, /Allowed paths:/); assert.match(constrained.context, /Acceptance:/); assert.ok(constrained.warnings.some((warning) => warning.includes("Budget exceeded")));
+  assert.match(constrained.context, /Allowed paths:/); assert.match(constrained.context, /Acceptance:/); assert.ok(constrained.warnings.some((warning) => /budget exceeded/i.test(warning)));
   const reviewer = await buildReviewerContext(root, "backend-01"); assert.match(reviewer.context, /Handoff: backend-01/);
   const manager = await buildManagerContext(root); assert.doesNotMatch(manager.context, /Implemented the backend endpoint/);
 });
