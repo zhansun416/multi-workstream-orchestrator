@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Deliver a small, local Runtime v0.1 that deterministically handles the mechanical parts of MSO governance while leaving design, priority, risk, and acceptance decisions to the Manager Agent.
+Deliver a small, local Runtime that deterministically handles the mechanical parts of MSO governance while leaving design, priority, risk, and acceptance decisions to the Manager Agent.
 
 ## Users and success criteria
 
@@ -21,7 +21,7 @@ No Agent lifecycle management, OpenAI API calls, worktree or Git automation, she
 
 ## Quality and acceptance standards
 
-The CLI is testable with fixtures, invalid DAGs fail explicitly, and all writes are limited to the task DAG state fields requested by the user.
+The CLI is testable with fixtures, invalid DAGs fail explicitly, and task transitions use a locked read-validate-write cycle with atomic replacement and stale-snapshot protection.
 
 ## Technology / data / license constraints
 

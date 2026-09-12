@@ -1,10 +1,7 @@
-import { normalizeRelativePath } from "./loader.js";
+import { scopesOverlap } from "./paths.js";
 
 export function pathsMayOverlap(left, right) {
-  const a = staticPrefix(normalizeRelativePath(left));
-  const b = staticPrefix(normalizeRelativePath(right));
-  if (!a || !b) return true;
-  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+  return scopesOverlap(left, right);
 }
 
 export function checkConflicts(taskA, taskB) {
@@ -15,14 +12,16 @@ export function checkConflicts(taskA, taskB) {
   for (const left of taskA.allowed_paths) for (const right of taskB.allowed_paths) {
     if (pathsMayOverlap(left, right)) reasons.push(`path_conflict:${left}:${right}`);
   }
-  return reasons;
-}
-
-function staticPrefix(pattern) {
-  const parts = [];
-  for (const part of pattern.split("/")) {
-    if (/[?*[]/.test(part)) break;
-    parts.push(part);
+  for (const left of taskA.coordination_exceptions ?? []) {
+    for (const right of taskB.coordination_exceptions ?? []) if (pathsMayOverlap(left, right)) reasons.push(`path_conflict:${left}:${right}`);
+    if (taskB.owner_type === "manager") {
+      for (const right of taskB.allowed_paths) if (pathsMayOverlap(left, right)) reasons.push(`path_conflict:${left}:${right}`);
+    }
   }
-  return parts.join("/");
+  if (taskA.owner_type === "manager") {
+    for (const left of taskA.allowed_paths) {
+      for (const right of taskB.coordination_exceptions ?? []) if (pathsMayOverlap(left, right)) reasons.push(`path_conflict:${left}:${right}`);
+    }
+  }
+  return [...new Set(reasons)];
 }

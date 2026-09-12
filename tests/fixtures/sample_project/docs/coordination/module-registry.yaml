@@ -33,3 +33,13 @@ modules:
     non_goals: []
     validation:
       - manual review
+  - id: admin
+    name: Backend admin
+    purpose: Maintain the backend admin API fixture.
+    writable_paths:
+      - packages/backend/api/**
+    inputs: []
+    outputs: []
+    non_goals: []
+    validation:
+      - admin API tests

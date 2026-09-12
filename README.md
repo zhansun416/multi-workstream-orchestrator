@@ -1,22 +1,18 @@
 # Multi-Workstream Orchestrator
 
-MSO is a governance workflow for substantial multi-module work. Runtime v0.1.1 is its intentionally small, local implementation aid.
+MSO is a governance workflow for substantial multi-module work. Runtime v0.2.0 is its intentionally small, local implementation aid.
 
 ```text
 Skill   = Policy
-Runtime = Deterministic Execution Layer
-Agent   = Intelligent Worker
+Runtime = Deterministic execution checks
+Agent   = Intelligent Manager or Worker
 ```
 
-## What each layer does
+The [MSO Skill](SKILL.md) defines Manager ownership, stable Worker windows, module boundaries, task handoffs, integration, and acceptance. Runtime reads the coordination files and mechanically checks dependencies, owners, path scopes, active conflicts, state transitions, contracts, handoffs, and bounded context. The Manager still decides intent, architecture, priority, risk, semantic correctness, and final acceptance.
 
-- The [MSO Skill](SKILL.md) defines governance: Manager ownership, module boundaries, task handoffs, validation, and acceptance.
-- **Runtime v0.1.1** deterministically reads and checks project coordination files: task dependencies, task state, execution conflicts, handoff completeness, and bounded context assembly. When available, the MSO Manager uses it first for these mechanical checks.
-- **Agents** make the decisions Runtime must not make: project interpretation, architecture, priorities, contracts, risk, worker creation, design changes, and final acceptance.
+Runtime does not start Agents, call model APIs, create worktrees, run Git or arbitrary commands, merge work, run a service, or provide a web UI.
 
-Runtime v0.1.1 does **not** start Agents, call model APIs, create worktrees, execute arbitrary shell commands, modify Git, merge work, run a service, or provide a web UI.
-
-## Requirements and install
+## Requirements and local development
 
 Node.js 20 or newer is required.
 
@@ -25,60 +21,115 @@ npm install
 npm test
 ```
 
+When the skill is installed elsewhere, invoke the Runtime by its absolute installed path and pass the target project explicitly. Do not assume the target project contains `src/cli.js`.
+
+```bash
+MSO_RUNTIME=/absolute/path/to/multi-workstream-orchestrator/src/cli.js
+PROJECT_ROOT=/absolute/path/to/target-project
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" status
+```
+
+If Runtime cannot be loaded, the Manager may perform the same checks manually and record them. Once Runtime runs and reports an error, the error is a failed gate to resolve; it is not an “unavailable Runtime” fallback case.
+
 ## Coordination contract
 
-Runtime reads the target project's coordination files. `docs/coordination/task-dag.yaml` is the sole authority for persisted task state. `STATE.md` remains a human-readable summary rather than a second state machine.
+`docs/coordination/task-dag.yaml` is the sole persisted task-state authority. Change-package `tasks.yaml` files contain only `task_ids` that reference this DAG. `STATE.md` is a human-readable summary.
 
-Persisted statuses are:
+The DAG has a monotonically increasing `revision`. State transitions acquire a project-local lock, reload and validate inside the lock, then write a temporary file and atomically rename it. The public snapshot save also checks the numeric revision and an exact content hash, so a stale snapshot cannot overwrite a Runtime transition or an unversioned manual edit. MSO still assumes a single Manager serializes coordination writes; this is not a distributed store. After a lock timeout, confirm that no Manager or transition is still running before removing a proven orphaned `.lock` file; Runtime never deletes a contended lock automatically.
+
+Persisted status transitions are:
 
 ```text
 draft → ready → assigned → in_progress → handoff → review → done
-                              ↘ blocked → ready
+                              ↘ blocked → ready       ↘ in_progress (reasoned rework)
 ```
 
-When a task enters `blocked`, Runtime stores `blocked_from` in its task record. In v0.1.1, unblocking always returns it to `ready` and clears the resolved `blocker`, while retaining provenance as the future extension point for a policy that restores the prior state.
+`assigned`, `in_progress`, `handoff`, and `review` all retain their task's write occupancy. A `ready → assigned` transition rechecks the same eligibility used by `ready` and `wave`: dependencies, owner availability, required contracts, `parallel`, explicit conflicts, owner conflicts, and effective write paths. An active `parallel: false` task excludes every new assignment; a ready `parallel: false` task can form a wave only when no task is active.
 
-`parallel: true` permits a task to share a wave only after dependency, explicit-conflict, writable-path, and owner checks pass. `parallel: false` produces a single-task wave according to declaration order, which is the Manager's priority order.
+`wave` returns both the selected tasks and excluded task IDs with reasons. A wave is a current recommendation, so assignment always rechecks eligibility under the lock.
 
-`conflicts_with` entries must name existing, distinct task IDs. Recommended `allowed_paths` forms are conservative directory scopes such as `src/**`, `packages/backend/**`, and `docs/**`. Runtime v0.1.1 does not claim support for broad `**`, filename-only patterns such as `*.md`, brace expansion, or complex glob semantics.
+## Owners and path permissions
+
+Task owners use one of two explicit forms:
+
+- `owner_type: module` is the default. `owner` must name a registered module, that module must be available for assignment, and every task `allowed_paths` entry must fit inside its `writable_paths`.
+- `owner_type: manager` is an explicit Manager task. It does not turn an unknown or misspelled module name into a Manager exception; its writable scope is still limited by its task card.
+
+Paths support only exact project-relative files such as `README.md` and directory scopes ending in `/**`, such as `packages/backend/**`. Other glob syntax is rejected. Task IDs are safe single path segments because they are used to derive coordination output paths.
+
+For module tasks, registered contract files and `docs/coordination/**` are protected even when a broad scope such as `docs/**` contains them. Each task receives only these protected-path exceptions:
+
+- `docs/coordination/handoffs/<task-id>.md`
+- `docs/coordination/evidence/<task-id>/**`
+- when `change_id` is present, `docs/coordination/changes/<change-id>/evidence/<task-id>/**`
+
+These effective exceptions participate in conflict checking. A Manager task that writes the same coordination area therefore conflicts with the Worker task.
+
+## Contracts and context budgets
+
+Every task input and output names a registered contract and version. A contract is usable when its registered file exists or the registry declares a non-empty summary form. Missing registries, versions, files, and sources appear as distinct assignment reasons and Worker-context warnings.
+
+Worker context always keeps a critical contract reference with its version, source status, summary when available, source path, and a required pre-read instruction. The full body may be omitted under a tight character budget, but the obligation and path remain. Acceptance criteria, effective writable boundaries, and coordination exceptions are also critical.
+
+## Handoffs, rework, and integration
+
+The validator checks the handoff title and sections, changed-file permissions, declared verification, and evidence. Evidence reports three separate facts: declaration, reference syntax, and local-file existence. Manual evidence and external URLs remain allowed structural evidence; URLs are not fetched.
+
+An invalid standalone validation returns JSON with `error.code: HANDOFF_INVALID` and exits with status 1. Runtime or usage failures return a stable JSON error object and status 2.
+
+Review failure returns the same task to `in_progress` with `--reason`. Runtime increments `attempt`, marks prior evidence superseded, and requires the next handoff to identify the current attempt. A separate repair task is reserved for genuinely separate scope.
+
+New task cards must declare `delivery.kind` as `code`, `artifact`, or `manual`. A code task must require a handoff. Its first and later handoffs add:
+
+```markdown
+## Delivery identity
+
+- attempt: 1
+- base_commit: <full 40- or 64-hex commit id>
+- head_commit: <full 40- or 64-hex commit id>
+- worktree: /absolute/path/to/worktree
+- branch: optional-branch-name
+```
+
+Its `Validation performed` section uses these structured entries:
+
+```markdown
+- command: npm test
+- working_directory: /absolute/path/to/worktree
+- exit_code: 0
+- head_commit: <same delivered head_commit>
+```
+
+Before `review → done`, the Manager integrates the delivery, verifies the integrated version, and records both against the same immutable commit:
+
+```bash
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" transition <task-id> done \
+  --integration-commit <full-commit-id> \
+  --verification-commit <same-full-commit-id> \
+  --integration-verification "npm test passed in the integration worktree"
+```
+
+Runtime checks this record's structure and version equality. It does not inspect Git or run the command. The Manager checks the actual diff and decides whether the evidence meets acceptance.
+
+For `artifact` or `manual` Fast Path tasks with `handoff_required: false`, `handoff → review` records current evidence with `--validation-evidence "<summary>"`. Legacy task cards remain readable; historical done tasks are not forced to invent delivery metadata.
 
 ## CLI
 
-Run commands from a target project root, or pass `--root` explicitly.
-
 ```bash
-node src/cli.js status
-node src/cli.js ready
-node src/cli.js wave
-node src/cli.js task <task-id>
-node src/cli.js context manager
-node src/cli.js context worker <task-id>
-node src/cli.js context reviewer <task-id>
-node src/cli.js handoff validate <task-id>
-node src/cli.js transition <task-id> handoff
-node src/cli.js --root ../another-project --json status
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" status
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" ready
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" wave
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" task <task-id>
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" context manager
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" context worker <task-id>
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" context reviewer <task-id>
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" handoff validate <task-id>
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" transition <task-id> assigned
+node "$MSO_RUNTIME" --root "$PROJECT_ROOT" transition <task-id> in_progress --reason "review finding"
 ```
 
-The CLI emits JSON by default in v0.1.1, making it usable by both people and future tool callers. `--json` remains an accepted no-op compatibility flag; no human-readable formatter is provided.
+The CLI emits JSON by default. `--json` remains an accepted compatibility flag.
 
-## Context Builder
+## Development fixture
 
-Manager, Worker, and Reviewer contexts are assembled from only role-relevant sources. Output includes `included_sources` and `omitted_sources`; every included source includes one or more explicit reasons such as `current_task`, `direct_dependency`, `relevant_contract`, or `shared_contract`.
-
-Budgets are character estimates configured in `docs/coordination/runtime.yaml`. Lower-priority sources are omitted first. Acceptance and writable paths are never silently omitted; exceeding a budget to retain a critical source returns a warning.
-
-## Handoff evidence
-
-The validator checks headings, task identity, changed-file scope, verification declarations, and evidence in three distinct layers:
-
-1. **Declared:** at least one evidence item is listed.
-2. **Reference-valid:** each item is a safe relative path, an HTTPS/HTTP URL, or `manual: <description>`.
-3. **Entity-file exists:** only declared local file references are checked for an existing regular file.
-
-Manual checks and external URLs are valid evidence types; they do not require a local file. URLs are not fetched in v0.1.1.
-
-For a task with `handoff_required: true`, the `handoff → review` transition automatically runs this structural validation and rejects invalid handoffs. With `handoff_required: false`, the transition proceeds without the gate. Runtime never accepts work on this basis; the Manager still decides whether `review → done` is warranted.
-
-## Development
-
-The sample project under `tests/fixtures/sample_project` exercises a backend, frontend, and documentation module. Its expected first wave contains `backend-01` and `docs-01`; `frontend-01` waits on `backend-01`, while a nested backend task is excluded by writable-path conflict.
+The sample project under `tests/fixtures/sample_project` exercises backend, frontend, admin, and documentation modules. Its expected first wave contains `backend-01` and `docs-01`; `frontend-01` waits on `backend-01`, while the nested admin task is excluded by its backend path conflict. The fixture keeps legacy task cards deliberately so backwards compatibility remains covered.

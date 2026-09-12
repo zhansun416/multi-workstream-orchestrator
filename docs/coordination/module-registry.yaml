@@ -6,6 +6,7 @@ modules:
     writable_paths:
       - src/loader.js
       - src/errors.js
+      - src/paths.js
     inputs:
       - TaskDag@v1
     outputs:
@@ -41,6 +42,7 @@ modules:
     writable_paths:
       - src/state.js
       - src/handoff.js
+      - src/permissions.js
     inputs:
       - ValidatedTaskDag@v1
     outputs:
