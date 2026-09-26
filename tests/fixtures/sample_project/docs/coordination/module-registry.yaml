@@ -27,9 +27,14 @@ modules:
     name: Documentation
     purpose: Maintain usage documentation.
     writable_paths:
-      - docs/**
+      - docs/guides/**
     inputs: []
     outputs: []
     non_goals: []
     validation:
       - manual review
+  - id: admin
+    name: Backend administration
+    purpose: Maintain administrative API handlers
+    writable_paths: [packages/backend/api/**]
+    validation: [admin API tests]

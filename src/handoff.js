@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { normalizeRelativePath } from "./loader.js";
+import { normalizeRelativePath, scopeContains } from "./loader.js";
 
 const requiredSections = ["Result", "Changed files", "Contract impact", "Validation performed", "Evidence locations", "Known limits / risks", "Suggested next action"];
 
@@ -21,7 +21,7 @@ export async function validateHandoff(root, task) {
   for (const item of changed.filter((item) => item !== "(none)")) {
     try {
       const filePath = normalizeRelativePath(item);
-      if (!task.allowed_paths.some((scope) => isAllowed(filePath, scope))) errors.push(`Changed file outside allowed_paths: ${filePath}`);
+      if (![...task.allowed_paths, `docs/coordination/handoffs/${task.id}.md`, `docs/coordination/evidence/${task.id}/**`].some((scope) => scopeContains(scope, filePath))) errors.push(`Changed file outside allowed_paths: ${filePath}`);
     } catch (error) { errors.push(`Invalid changed file '${item}': ${error.message}`); }
   }
   if (!task.verification.length) errors.push(`Task '${task.id}' has no verification requirements.`);
@@ -46,11 +46,6 @@ export function markdownSections(content) {
 
 function listEntries(section) {
   return section.split("\n").map((line) => line.trim().replace(/^(?:[-*+] |\d+\. )/, "").trim().replaceAll("`", "")).filter(Boolean);
-}
-
-function isAllowed(file, scope) {
-  const prefix = normalizeRelativePath(scope).split("*")[0].replace(/\/$/, "");
-  return file === prefix || file.startsWith(`${prefix}/`);
 }
 
 async function validateEvidence(root, references) {

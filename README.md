@@ -1,84 +1,74 @@
 # Multi-Workstream Orchestrator
 
-MSO is a governance workflow for substantial multi-module work. Runtime v0.1.1 is its intentionally small, local implementation aid.
+MSO coordinates substantial multi-module work through a Manager, stable Worker ownership, explicit dependencies and verification after integration. Runtime **v0.2.0** supplies deterministic checks; the Manager makes architectural and acceptance decisions.
+
+## Install and run
+
+Node.js 20+ is required for the optional JavaScript Runtime. Copy this package to your skill directory, then run `npm ci` there. The skill can operate manually if Runtime is unavailable, with its limitations recorded.
 
 ```text
-Skill   = Policy
-Runtime = Deterministic Execution Layer
-Agent   = Intelligent Worker
-```
-
-## What each layer does
-
-- The [MSO Skill](SKILL.md) defines governance: Manager ownership, module boundaries, task handoffs, validation, and acceptance.
-- **Runtime v0.1.1** deterministically reads and checks project coordination files: task dependencies, task state, execution conflicts, handoff completeness, and bounded context assembly. When available, the MSO Manager uses it first for these mechanical checks.
-- **Agents** make the decisions Runtime must not make: project interpretation, architecture, priorities, contracts, risk, worker creation, design changes, and final acceptance.
-
-Runtime v0.1.1 does **not** start Agents, call model APIs, create worktrees, execute arbitrary shell commands, modify Git, merge work, run a service, or provide a web UI.
-
-## Requirements and install
-
-Node.js 20 or newer is required.
-
-```bash
-npm install
+npm ci
 npm test
+node src/cli.js --root tests/fixtures/sample_project check
+node src/cli.js --root tests/fixtures/sample_project wave
+node src/cli.js --root <manager-checkout> recover
 ```
 
-## Coordination contract
+When running outside this package, use an absolute path to `src/cli.js` and an explicit `--root`. The root is the canonical Manager checkout, not an arbitrary Worker copy.
 
-Runtime reads the target project's coordination files. `docs/coordination/task-dag.yaml` is the sole authority for persisted task state. `STATE.md` remains a human-readable summary rather than a second state machine.
+## What changed in v0.2
 
-Persisted statuses are:
+- Ready waves and direct assignments check existing reservations, dependencies, exclusive resources, Worker/worktree reuse and concurrency limits.
+- DAG writes use a lock, stale-snapshot check and atomic replacement. Only one Manager owns the canonical state.
+- Assignments bind task revision, dispatch ID, real task ID, actual worktree, base commit and contract versions.
+- Structured handoffs and integration acceptance bind verification evidence to exact code commits. Rejected handoff commits cannot be reused as repair evidence.
+- `audit` checks actual Git changes against declared scope; omitted files in a narrative cannot bypass that check.
+- `recover` produces a read-only reconciliation inventory; it does not automatically resend work or decide whether an agent is alive.
+- Worker reporting paths are explicitly allowed per task, separate from implementation scope and Manager-owned coordination files.
+- Cancellation, blocked resolution, repair reasons and assignment history are recorded.
+- Validation commands return nonzero when checks fail.
+
+## Commands
 
 ```text
-draft → ready → assigned → in_progress → handoff → review → done
-                              ↘ blocked → ready
+status
+ready
+wave
+task <id>
+check
+recover
+context manager
+context worker <id>
+context reviewer <id>
+handoff validate <id>
+audit <id> --worktree <actual-checkout>
+transition <id> assigned --expect-revision 1 --record <assignment.json>
+transition <id> in_progress
+transition <id> blocked --blocker "decision required and resume condition"
+transition <id> ready --reason "decision resolved and prior writer stopped"
+transition <id> handoff
+transition <id> review
+transition <id> done --record <acceptance.json>
 ```
 
-When a task enters `blocked`, Runtime stores `blocked_from` in its task record. In v0.1.1, unblocking always returns it to `ready` and clears the resolved `blocker`, while retaining provenance as the future extension point for a policy that restores the prior state.
+Use `node src/cli.js --root <project> <command>`. JSON is the default; `--json` is accepted for compatibility. Exit codes: 0 success, 1 validation failure, 2 invalid input/execution failure. `ready` filters dependency/reservation conflicts; `wave` also applies capacity and chooses declaration-ordered compatible tasks. A wave is a proposal, not an atomic batch dispatch: each assignment rechecks current state.
 
-`parallel: true` permits a task to share a wave only after dependency, explicit-conflict, writable-path, and owner checks pass. `parallel: false` produces a single-task wave according to declaration order, which is the Manager's priority order.
+## State and evidence
 
-`conflicts_with` entries must name existing, distinct task IDs. Recommended `allowed_paths` forms are conservative directory scopes such as `src/**`, `packages/backend/**`, and `docs/**`. Runtime v0.1.1 does not claim support for broad `**`, filename-only patterns such as `*.md`, brace expansion, or complex glob semantics.
+`docs/coordination/task-dag.yaml` is the sole task-state authority. `STATE.md` is a human summary; change documents link task IDs instead of duplicating statuses. Use `require_provenance: true` in new Git projects and `max_concurrent` (default 3). Existing projects without provenance mode remain readable with a warning; migrate running work by observing real assignments and commits first.
 
-## CLI
+Supported write scopes are exact relative paths or `directory/**`. Broad/complex globs fail explicitly. Workers may additionally write only their own handoff and evidence directory. Conflicts are conservative and case-insensitive; actual changed-file scope checks use exact names. Shared frozen interface reads are allowed; write/contract changes require Manager coordination.
 
-Run commands from a target project root, or pass `--root` explicitly.
+Markdown handoffs retain their existing headings. Provenance mode adds a task-specific `handoff.json` with command/manual evidence and Worker commit. Final acceptance records Manager review and the tested integration commit. Local evidence file existence and record consistency are checked; logs are not executed or judged for truth. See [templates](references/templates.md) and [operational procedure](references/operations.md).
 
-```bash
-node src/cli.js status
-node src/cli.js ready
-node src/cli.js wave
-node src/cli.js task <task-id>
-node src/cli.js context manager
-node src/cli.js context worker <task-id>
-node src/cli.js context reviewer <task-id>
-node src/cli.js handoff validate <task-id>
-node src/cli.js transition <task-id> handoff
-node src/cli.js --root ../another-project --json status
-```
+## Boundaries
 
-The CLI emits JSON by default in v0.1.1, making it usable by both people and future tool callers. `--json` remains an accepted no-op compatibility flag; no human-readable formatter is provided.
+Runtime does not create tasks/worktrees, call model APIs, execute declared test commands, commit, merge, deploy or run a background service. `audit` runs fixed read-only Git commands through argument arrays. Scope declarations are not OS isolation; Manager must inspect actual Workers, dirty files, contracts and integration behavior. No-Git projects use a documented single-writer manual workflow rather than invented commit identifiers.
 
-## Context Builder
+Context is role-scoped with explicit included/omitted sources. Critical task fields survive character-budget pressure; omitted contract contents must be retrieved before implementation. Worker context distinguishes coordination root from execution root.
 
-Manager, Worker, and Reviewer contexts are assembled from only role-relevant sources. Output includes `included_sources` and `omitted_sources`; every included source includes one or more explicit reasons such as `current_task`, `direct_dependency`, `relevant_contract`, or `shared_contract`.
+## Verification
 
-Budgets are character estimates configured in `docs/coordination/runtime.yaml`. Lower-priority sources are omitted first. Acceptance and writable paths are never silently omitted; exceeding a budget to retain a critical source returns a warning.
+`npm test` covers schema/dependency failures, active reservations, resource/capacity conflicts, state transactions, stale evidence, repair/reassignment, context, CLI failures and a real disposable Git repository with an unauthorized change. No live Worker task is started by the tests.
 
-## Handoff evidence
-
-The validator checks headings, task identity, changed-file scope, verification declarations, and evidence in three distinct layers:
-
-1. **Declared:** at least one evidence item is listed.
-2. **Reference-valid:** each item is a safe relative path, an HTTPS/HTTP URL, or `manual: <description>`.
-3. **Entity-file exists:** only declared local file references are checked for an existing regular file.
-
-Manual checks and external URLs are valid evidence types; they do not require a local file. URLs are not fetched in v0.1.1.
-
-For a task with `handoff_required: true`, the `handoff → review` transition automatically runs this structural validation and rejects invalid handoffs. With `handoff_required: false`, the transition proceeds without the gate. Runtime never accepts work on this basis; the Manager still decides whether `review → done` is warranted.
-
-## Development
-
-The sample project under `tests/fixtures/sample_project` exercises a backend, frontend, and documentation module. Its expected first wave contains `backend-01` and `docs-01`; `frontend-01` waits on `backend-01`, while a nested backend task is excluded by writable-path conflict.
+The sample project has backend, frontend, documentation and admin owners. Backend and documentation can run first; frontend waits for integrated backend work, and admin waits on the conflicting backend scope. [SKILL.md](SKILL.md) is the agent workflow entry point.

@@ -1,217 +1,84 @@
 ---
 name: multi-workstream-orchestrator
-description: Start and run a complex software or research-tool project through a Manager-led workflow. Use when the user asks to plan a new project, divide it into stable modules, create and coordinate long-lived development task windows, manage dependencies, or maintain cross-session project state. Do not use for one-off edits, simple bug fixes, or research-only tasks.
+description: Plan and coordinate substantial multi-module software or research-tool projects with a Manager, stable module ownership, dependency-aware tasks, isolated worktrees, recoverable assignments, and integrated acceptance. Use for explicitly requested multi-window development or long-running project coordination; not for one-off edits, simple fixes, or research-only tasks.
 ---
 
-# Multi-Workstream Orchestrator (MSO)
+# Multi-Workstream Orchestrator
 
-MSO is a reusable project workflow, not a domain skill. It turns a new complex project into a stable architecture, then coordinates narrowly scoped long-lived development windows until each milestone is integrated and verified.
+Deliver a small user-visible milestone through stable module ownership, bounded assignments and verification after integration. The Manager owns architecture, contracts, priority, dispatch, coordination records, integration and acceptance. Workers implement within their assigned scopes and provide evidence. Reviewer/QA is a responsibility; it does not require another task window.
 
-The objective is **visible, verified delivery with clear ownership**, not maximum agent or window count.
+## Start with the right amount of coordination
 
-## Runtime-assisted operation
+Use this workflow when dependencies, multiple modules or cross-session continuity justify it. Do not invent three modules or create idle windows merely to follow a template. For a narrow correction use one task card with scope, acceptance and verification; omit separate proposal/design files unless they support an actual decision.
 
-MSO works with or without the optional local Runtime. When Runtime is available, the Manager uses it first for deterministic coordination work:
+Research, prototypes and uncertainty resolution stay with the Manager. Create a formal Worker only when its module has stable responsibility, continuing work, explicit inputs/outputs, a writable scope and testable acceptance. Preserve existing user authorization. Merely asking to inspect or edit this skill does not authorize starting development task windows.
 
-```text
-status
-ready
-wave
-task
-context
-handoff validate
-transition
-```
+## Runtime and authoritative state
 
-Runtime, not LLM reasoning, determines whether declared dependencies are satisfied, which tasks are ready, explicit or writable-path conflicts, a declaration-ordered safe execution wave, legal state transitions, and handoff structural completeness. The Manager still decides project intent, architecture, modules, shared contracts, priority, risk, Worker creation, design changes, semantic review, and final acceptance.
-
-`docs/coordination/task-dag.yaml` is the persisted task-status source of truth. `docs/coordination/STATE.md` is a human-readable project summary, not a second task state machine.
-
-If Runtime is unavailable, the Manager performs the same checks manually and records the result in the coordination files. Runtime is an accelerator, never a prerequisite for using MSO.
-
-## Operating model
+The bundled **JavaScript Runtime** requires Node.js 20+ and `npm ci` in the skill directory. Use an absolute CLI path and explicit target root:
 
 ```text
-Manager only
-  → discover and architect
-  → freeze module boundaries and shared contracts
-  → create formal development windows
-  → schedule task waves
-  → integrate, verify, archive, repeat
+node <skill>/src/cli.js --root <manager-checkout> check
+node <skill>/src/cli.js --root <manager-checkout> status
+node <skill>/src/cli.js --root <manager-checkout> wave
 ```
 
-Roles:
+Runtime checks declared dependencies, reservations, conflicts, transitions, handoffs and commit-bound records. It never creates agents, executes verification commands, writes Git history, merges code, or grants publication authorization. The Manager reviews meaning and actual results. If Runtime is unavailable, perform the same checks manually and record the limitation; do not claim automatic enforcement.
 
-- **Manager**: the single visible control window. Owns project direction, shared contracts, architecture, module registry, task DAG, window creation, scheduling, integration, and final acceptance. It does not implement a Worker's business module.
-- **Worker**: a long-lived, visible development task window created by the Manager after module boundaries are clear. It only changes its authorized module and produces verification evidence plus a handoff.
-- **Reviewer / QA**: a responsibility, not a default extra window. Use an existing QA-oriented Worker when one exists; otherwise the Manager performs cross-module review.
+- `docs/coordination/task-dag.yaml` in the **Manager checkout** is the sole task status authority. Only the Manager writes it.
+- `module-registry.yaml` records module ownership and Worker bindings. `runtime.yaml` indexes versioned contract files.
+- `STATE.md` summarizes outcomes, decisions, blockers and the next action. Link task IDs; do not maintain another status machine.
+- Change directories contain requirements/design and a list of task IDs. Do not create another independently maintained `changes/*/tasks.yaml`.
+- Worktrees contain separate file copies. A Worker reads the dispatched task/contract snapshot, not an assumed live copy of Manager state.
 
-## Non-negotiable rules
+Read [templates.md](references/templates.md) for the canonical schema and worker prompt. Existing v0.1 projects remain readable; [operations.md](references/operations.md) explains upgrading without losing running assignments.
 
-1. Do **not** create research, experiment, prototype, or temporary-debug windows. The Manager performs those activities itself.
-2. Do **not** create Worker windows before architecture, module boundaries, and shared contracts are sufficiently clear.
-3. Create a Worker only when its module has stable responsibility, continuing work, a clear writable scope, defined inputs/outputs, and independently testable acceptance criteria.
-4. A Worker may not modify another Worker's files, the module registry, or shared contracts. It must submit a change request to the Manager instead.
-5. Do not parallelize tasks that share a writable directory, shared schema, public interface, or unresolved upstream dependency.
-6. A formal Worker task is not complete until it includes reproducible validation evidence and a handoff; a verbal completion claim is insufficient. Only a lightweight/Fast Path task that explicitly sets `handoff_required: false` may omit a handoff, while still recording its validation evidence in the task card.
-7. Treat project files as the source of truth. Chat history is supporting context only.
-8. Use Git/worktrees before simultaneous code writes in multiple windows. Without isolation, allow only one writer in a shared working directory.
+## 1. Discover and define the first milestone
 
-## When to activate
+Establish outcome, users, measurable success, constraints/non-goals, uncertain decisions and the smallest end-to-end result. Ask only questions that affect direction; use reversible assumptions where appropriate. Inspect existing coordination files before creating new ones. Keep reusable decisions in `CONSTITUTION.md` and current facts in `STATE.md`.
 
-Use MSO for a new project or a substantial new program of work when at least one is true:
+Define modules, ownership, shared contracts and the initial dependency graph. Stabilize enough of each interface to implement the first milestone; later contract changes follow an explicit change request. The Manager handles shared glue/configuration and contract changes. A Worker reports cross-module work instead of silently expanding scope.
 
-- the project needs three or more stable development modules;
-- the user asks for a Manager and module task windows;
-- multiple features have dependencies or integration risk;
-- the work will last across several sessions or milestones.
+## 2. Register and reuse Workers
 
-For a simple feature or bug fix, use a short plan and normal implementation instead. Do not impose the full MSO artifact set.
+Visible development tasks require an explicit user request for separate/multiple tasks. When authorized, first look for the module's recorded Worker and reuse it if its scope and state still match. Create only Workers needed by ready work. Use available task tools according to their actual schemas: discover the saved project before creating a task, record the real returned task ID, and distinguish setup-pending IDs from usable task IDs. Do not infer creation succeeded from a request alone.
 
-## Phase 0 — Discover (Manager only)
+For Git projects use isolated worktrees before concurrent writes. Record each actual execution directory, branch when applicable and starting commit. A new worktree must contain the relevant contracts and integrated prerequisites; Manager's uncommitted files are not automatically available there. For non-Git projects permit only one writer and use documented artifact snapshots with manual verification; commit-bound Runtime gates require Git and must not be filled with invented SHAs.
 
-Before creating a Worker, establish:
+Maintain one current assignment per Worker. A task returning a response does not prove its assignment is complete. Reuse idle Workers; replace stale Workers only after reconciling pending edits and recording the handover. Do not change the user's chosen model or reasoning settings unless requested.
 
-- problem, users, and intended outcome;
-- measurable success criteria;
-- non-goals and constraints;
-- the smallest user-visible vertical result;
-- key technical, licensing, data, or integration risks.
+## 3. Dispatch ready work
 
-Ask only questions that materially affect project direction. Make reasonable, reversible assumptions when possible. Do not open child windows in this phase.
+Tasks must have a goal, module owner, revision, explicit scope, acceptance, verification, dependencies and conflict/resource declarations. Native supported scopes are exact paths or `directory/**`; no broad wildcard or guessed glob behavior.
 
-Create or update `docs/coordination/CONSTITUTION.md` and `docs/coordination/STATE.md` using the templates in [references/templates.md](references/templates.md).
+Two modules may read the same frozen interface. Prevent simultaneous conflicting **writes**, use of exclusive runtime resources (ports, databases, output directories), duplicate Worker/worktree ownership, and unresolved upstream dependencies. Runtime checks candidates against both the new wave and existing reservations, including blocked/review tasks. Worktree isolation does not eliminate semantic merge conflicts.
 
-## Phase 1 — Architect and register modules (Manager only)
+Use the workflow in [operations.md](references/operations.md): check → choose wave → verify real execution environment → persist assignment → send task snapshot. The assignment contains a unique dispatch ID, task revision, actual task ID/worktree, base commit and contract versions. A lost response is reconciled against the saved dispatch; do not resend blindly. Set a small project `max_concurrent` and preserve capacity for integration.
 
-Define:
+Workers may write only task `allowed_paths`, plus their own `docs/coordination/handoffs/<id>.md` and `docs/coordination/evidence/<id>/**`. These reporting grants do not permit editing the DAG, registry, another task's evidence or shared contracts.
 
-- system boundaries and major data/control flows;
-- shared entities, schemas, and interface versioning;
-- candidate modules and their dependencies;
-- each module's owner, writable locations, inputs, outputs, non-goals, and validation method;
-- an initial vertical milestone.
+## 4. Execute and handle blockers
 
-Record approved modules in `docs/coordination/module-registry.yaml`.
+Workers read the exact assignment and contracts, verify the actual checkout/base, plan briefly, implement, run required checks, inspect the result, then hand off. They do not reprioritize the project or dispatch other Workers. Report the dispatch ID with every handoff/blocker so stale messages can be recognized.
 
-Do not treat a label as a module merely because it sounds useful. A module earns a Worker window only when it satisfies every Worker creation rule above.
+A blocker records what failed, evidence, affected tasks, the required decision and a concrete resume condition. Keep its reservation until the prior writer is confirmed stopped or acknowledges the handoff. Manager resolves it, revises contracts/tasks when needed, increments affected task revisions, and dispatches a fresh assignment. Interface changes name producer/consumers, compatibility/migration, new version and affected tests. Reusing a superseded assignment or evidence is not allowed.
 
-## Phase 2 — Create formal development windows
+Review failure returns to a bounded repair task/assignment with a reason and updated evidence; it must not cycle indefinitely without a concrete failing acceptance condition. Record a checkpoint and next action if work cannot continue. Do not promise unattended monitoring after the current turn without an explicitly requested, configured automation.
 
-When the user has explicitly requested multi-window development (including an explicit MSO invocation for that purpose) and the module registry is ready, create one visible Codex task window for each approved Worker.
+## 5. Integrate and accept
 
-The initial Worker prompt must include, verbatim in substance:
+Read [operations.md](references/operations.md) for handoff and integration records. Require a concrete Worker commit and evidence bound to the task revision/dispatch/commit. Record commands, cwd, exit codes, observations and local evidence paths, including checks not run. A markdown heading or a passing log from an old commit is insufficient.
 
-```text
-Project root: <absolute path>
-Module: <module name>
-Mission: <what it owns>
-Writable scope: <directories/files>
-Inputs: <contract names and versions>
-Outputs: <contract names and versions>
-Dependencies: <modules or tasks>
-Non-goals: <explicit exclusions>
-Rules: do not modify shared contracts or other modules; submit a change request when blocked.
-First task: <a ready, bounded task or “read and wait for Manager assignment”>
-Acceptance: <tests, visual checks, fixtures, or other evidence>
-Handoff: changed files, validation commands/results, known limits, follow-up needs.
-```
+1. Collect the task's handoff/evidence from its actual worktree into the canonical coordination record, without overwriting unrelated records.
+2. Run structural handoff validation and `audit <id> --worktree <actual-checkout>`. Inspect the real diff against allowed paths; scope declarations are not a filesystem sandbox.
+3. Integrate approved commits in dependency order onto the Manager's integration branch. Record the chosen merge/cherry-pick method and resulting commit. Resolve conflicts as explicit integration work; never replace one Worker's directory wholesale with another copy.
+4. Run cross-module tests and the user scenario on the resulting integration commit. Record accepted criteria, verification evidence, Worker head and integration commit.
+5. Only the Manager transitions `review → done`. Runtime checks record consistency and file existence; it cannot prove commands were honestly run or judge semantic correctness.
 
-If the user has not explicitly authorized visible task creation, create the registry and show the proposed Worker list for approval instead. Never create experimental windows as a workaround.
+Completion requires integrated, verified work. Pushing, creating PRs, merging a public branch and deployment follow the user's actual authorization; this skill itself grants none. Retain evidence and update the next milestone. Archive a Worker only when its work is integrated or safely handed over; do not delete dirty worktrees to clear a task status.
 
-## Phase 3 — Specify and schedule a change
+## Resume an interrupted project
 
-For each substantial feature, the Manager creates `docs/coordination/changes/<feature-id>/` containing:
+Start with `recover`, not a new planning cycle. Read the canonical DAG/registry, inspect recorded task status through task tools, check actual worktrees, HEADs and dirty files, and reconcile handoffs/contract revisions. Pending assignment, running Worker, finished Worker awaiting integration and missing Worker are different cases. Runtime recovery output is a read-only inventory, not a liveness detector. Remove a stale writer lock only after confirming its process no longer owns the write; preserve a copy first.
 
-- `proposal.md`: purpose, scope, non-goals, success conditions;
-- `spec.md`: user scenarios and acceptance conditions;
-- `design.md`: technical approach, interface changes, risks;
-- `tasks.yaml`: tasks and dependencies;
-- `evidence/`: tests, screenshots, exports, and acceptance records.
-
-Small, isolated fixes may use **Fast Path**: a task card with scope, allowed paths, verification, and rollback/undo information. Do not require a full change package for a trivial, low-risk correction.
-
-Every task must define:
-
-```yaml
-id: feature-01-task-01
-owner: module-name
-goal: user-visible or contract-level result
-allowed_paths: []
-inputs: []
-outputs: []
-depends_on: []
-parallel: false
-conflicts_with: []
-acceptance: []
-verification: []
-handoff_required: true
-```
-
-Task state is:
-
-```text
-draft → ready → assigned → in_progress → handoff → review → done
-                                   ↘ blocked
-```
-
-The Manager constructs implementation waves from `depends_on`, `parallel`, and `conflicts_with`. Prefer a small number of ready tasks over waking every Worker.
-
-When Runtime is available, use its `status`, `ready`, `wave`, and `task` commands instead of independently reasoning through this mechanical DAG calculation.
-
-## Phase 4 — Worker execution
-
-When assigning a ready task, the Manager sends its task card and relevant contract references. The Worker follows this cycle:
-
-1. Read the task, owned boundaries, dependencies, and contract version.
-2. Write a concise local implementation plan before changing code.
-3. Implement only inside the allowed scope.
-4. Run the specified automated, visual, fixture, or manual checks.
-5. Review first for specification compliance, then for implementation quality.
-6. Write a handoff using the template.
-7. Use `handoff validate <task-id>` when Runtime is available; it checks structure, declared evidence, and allowed paths, not semantic correctness.
-8. Report `handoff` or `blocked`.
-
-Workers do not choose project priority, expand scope, or silently alter shared contracts.
-
-## Phase 5 — Integrate, verify, and archive
-
-The Manager:
-
-1. reviews Worker handoffs and checks that evidence exists;
-2. performs cross-module and user-scenario verification;
-3. opens a bounded repair task for failures rather than giving vague feedback;
-4. marks the change `done` only when its specification has converged;
-5. archives completed change evidence and updates `STATE.md` with decisions, risks, and the next milestone.
-
-When Runtime is available, use `transition` for task state changes. In particular, a `handoff → review` transition validates any required handoff before it proceeds. Runtime does not decide whether review passes: `review → done` remains a Manager decision.
-
-## Keeping the workflow fast
-
-- Keep research and uncertainty resolution in the Manager window.
-- Create formal Worker windows once per stable module, not once per task.
-- Work toward one small user-visible vertical result per milestone.
-- Use Fast Path for narrow work.
-- Parallelize only independent, contract-frozen work.
-- Put durable decisions and a concise task summary in `STATE.md`; keep persisted task status only in the task DAG so Workers do not repeatedly need background briefings.
-- If a task does not produce verifiable progress within its agreed timebox, the Manager reduces scope, resolves the dependency, or stops it.
-
-## What MSO borrows—and deliberately does not require
-
-- From **Spec Kit**: project principles, requirements, plans, tasks, and a final convergence check.
-- From **OpenSpec**: a stable baseline separated from in-flight change packages.
-- From **CCPM**: dependency-aware tasks, conflicts, blocked status, and Manager tracking.
-- From **Superpowers**: plan before implementation, verification evidence, and two-pass review for Worker tasks.
-- From **GSD Core**: milestone loops and durable project memory.
-
-MSO does not require installing any of those skills, GitHub Issues, a particular model, Superpowers scripts, or a dedicated QA task window.
-
-## Output at a successful MSO milestone
-
-Report succinctly:
-
-- the milestone and user-visible outcome;
-- which modules/windows were created or used;
-- completed, blocked, and next tasks;
-- verification evidence and unresolved risks;
-- links to the updated project state and change package.
+Report the milestone outcome, completed/blocked/next tasks, integrated commit and evidence links. Mention concrete limitations; keep internal dispatch mechanics out of routine user summaries.
