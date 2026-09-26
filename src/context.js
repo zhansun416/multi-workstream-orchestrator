@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { coordinationFile, loadTaskDag, readYaml, resolveRoot } from "./loader.js";
+import { coordinationFile, loadTaskDag, readYaml, resolveRoot, normalizeRelativePath } from "./loader.js";
 import { getBlockedTasks, getReadyTasks, getTaskStatus } from "./scheduler.js";
 import { markdownSections } from "./handoff.js";
 
@@ -9,7 +9,7 @@ const defaults = { manager: 12000, worker: 8000, reviewer: 10000 };
 export async function buildManagerContext(root, budget) {
   const project = resolveRoot(root); const dag = await loadTaskDag(project);
   const segments = await projectSegments(project, true);
-  const active = dag.tasks.filter((task) => task.status !== "done").map((task) => `- ${task.id}: ${getTaskStatus(dag, task.id).state} — ${task.goal}`).join("\n") || "- None";
+  const active = dag.tasks.filter((task) => !["done", "cancelled"].includes(task.status)).map((task) => `- ${task.id}: ${getTaskStatus(dag, task.id).state} — ${task.goal}`).join("\n") || "- None";
   segments.push(segment("Current tasks", active, "docs/coordination/task-dag.yaml", ["current_task_summary"], true));
   segments.push(segment("Scheduling", `Ready: ${getReadyTasks(dag).map((task) => task.id).join(", ") || "None"}\nBlocked: ${getBlockedTasks(dag).map((item) => item.task_id).join(", ") || "None"}`, "docs/coordination/task-dag.yaml", ["ready_and_blocked_tasks"], true));
   segments.push(...await contractSegments(project, null, "shared_contract"));
@@ -49,7 +49,7 @@ async function moduleSegments(root, task) {
 }
 async function contractSegments(root, ids, reason) {
   const config = await readYaml(coordinationFile(root, "runtime.yaml"), {}); const wanted = ids ? new Set(ids) : null; const segments = [];
-  for (const contract of config.contracts ?? []) { const full = contract.version ? `${contract.id}@${contract.version}` : contract.id; if (wanted && !wanted.has(full) && !wanted.has(contract.id)) continue; let text = contract.summary ?? "No contract summary available."; if (contract.path) try { text = await readFile(path.join(root, contract.path), "utf8"); } catch (error) { if (error.code !== "ENOENT") throw error; } segments.push(segment(`Contract ${full}`, text, contract.path ?? "docs/coordination/runtime.yaml", [reason])); }
+  for (const contract of config.contracts ?? []) { const full = contract.version ? `${contract.id}@${contract.version}` : contract.id; if (wanted && !wanted.has(full) && !wanted.has(contract.id)) continue; let text = contract.summary ?? "No contract summary available."; if (contract.path) try { text = await readFile(path.join(root, normalizeRelativePath(contract.path)), "utf8"); } catch (error) { if (error.code !== "ENOENT") throw error; } segments.push(segment(`Contract ${full}`, text, contract.path ?? "docs/coordination/runtime.yaml", [reason])); }
   return segments;
 }
 async function upstreamSegments(root, dependencies) {
@@ -57,7 +57,7 @@ async function upstreamSegments(root, dependencies) {
   for (const id of dependencies) { const relative = `docs/coordination/handoffs/${id}.md`; try { const sections = markdownSections(await readFile(path.join(root, relative), "utf8")); segments.push(segment(`Upstream handoff: ${id}`, [sections.get("Result"), sections.get("Contract impact")].filter(Boolean).join("\n") || "Handoff present; see path.", relative, ["direct_dependency"])); } catch (error) { if (error.code !== "ENOENT") throw error; } }
   return segments;
 }
-function taskText(root, task) { return [`Project root: ${root}`, `Module: ${task.owner}`, `Task: ${task.id}`, `Mission: ${task.goal}`, `Allowed paths: ${JSON.stringify(task.allowed_paths)}`, `Inputs: ${JSON.stringify(task.inputs)}`, `Outputs: ${JSON.stringify(task.outputs)}`, `Dependencies: ${JSON.stringify(task.depends_on)}`, `Acceptance: ${JSON.stringify(task.acceptance)}`, `Verification: ${JSON.stringify(task.verification)}`, "Handoff requirements: Result; Changed files; Contract impact; Validation performed; Evidence locations; Known limits / risks; Suggested next action."].join("\n"); }
+function taskText(root, task) { return [`Coordination root: ${root}`, `Execution root: ${task.raw.assignment?.worktree ?? "UNASSIGNED: Manager must supply actual checkout before writing"}`, `Task revision: ${task.raw.revision ?? 1}`, `Assignment: ${JSON.stringify(task.raw.assignment ?? null)}`, `Worker reporting grant: docs/coordination/handoffs/${task.id}.md; docs/coordination/evidence/${task.id}/**`, `Module: ${task.owner}`, `Task: ${task.id}`, `Mission: ${task.goal}`, `Allowed paths: ${JSON.stringify(task.allowed_paths)}`, `Inputs: ${JSON.stringify(task.inputs)}`, `Outputs: ${JSON.stringify(task.outputs)}`, `Dependencies: ${JSON.stringify(task.depends_on)}`, `Acceptance: ${JSON.stringify(task.acceptance)}`, `Verification: ${JSON.stringify(task.verification)}`, "Handoff requirements: Result; Changed files; Contract impact; Validation performed; Evidence locations; Known limits / risks; Suggested next action."].join("\n"); }
 async function getBudget(root, role, override) { if (override != null) return override; const config = await readYaml(coordinationFile(root, "runtime.yaml"), {}); return Number(config.context_budget?.[role] ?? defaults[role]); }
 function assemble(segments, budget) { const included = []; const omitted = []; const warnings = []; const chunks = []; let size = 0; for (const item of segments) { const chunk = `## ${item.title}\n${item.text.trim()}\n`; if (size + chunk.length <= budget || item.critical) { chunks.push(chunk); included.push(item.source); size += chunk.length; if (size > budget) warnings.push(`Context budget exceeded because critical fields were retained: ${item.source.path}`); } else { omitted.push(item.source); warnings.push(`Omitted lower-priority source due to budget: ${item.source.path}`); } } const context = `${chunks.join("\n").trim()}\n`; return { context, included_sources: mergeSources(included), omitted_sources: mergeSources(omitted), warnings, estimated_size: context.length }; }
 function mergeSources(sources) { const output = new Map(); for (const source of sources) { const current = output.get(source.path) ?? { path: source.path, reasons: [] }; for (const reason of source.reasons) if (!current.reasons.includes(reason)) current.reasons.push(reason); output.set(source.path, current); } return [...output.values()]; }

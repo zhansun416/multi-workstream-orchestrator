@@ -2,29 +2,28 @@
 
 ## Current milestone
 
-Runtime v0.1.1 complete and verified.
+Runtime v0.2.0: recoverable dispatch and commit-bound evidence.
 
 ## Current user-visible outcome
 
-Managers can use a local CLI to derive safe work from the coordination files without asking an LLM to evaluate DAG dependencies or write conflicts.
+The skill now supplies operational dispatch, recovery, integration and migration rules. The JavaScript Runtime rejects conflicts with reserved work, stale DAG writes and mismatched evidence, and can inspect actual committed file scope.
 
 ## Decisions made
 
-- `task-dag.yaml` is the Runtime state authority; `STATE.md` is a human-readable summary.
-- Runtime derives `runnable`, `running`, `waiting`, `blocked`, and `review_required` views without adding alternate persisted states.
-- A blocked task resumes to `ready` in v0.1.1. `blocked_from` is retained as provenance and as the future hook for restoring a prior state.
-- Context source records include one or more inclusion reasons.
-- Evidence distinguishes declaration, syntactic reference validity, and local-file existence. Manual and external evidence do not require a local file.
-- Runtime v0.1.1 makes the Skill Runtime-aware, gates required handoffs before review, validates conflict references, and clears resolved blocker text while retaining `blocked_from`.
+- Preserve and extend the existing JavaScript implementation; no parallel Python runtime.
+- Only the Manager checkout owns task status. Change packages link IDs.
+- Blocked/review work retains reservations until the writer is reconciled.
+- New Git projects use provenance mode. Legacy completed history is preserved; running work requires explicit migration before enabling strict gates.
+- Runtime checks declarations and observed Git diffs; the Manager verifies execution, semantics and integration.
 
 ## Active tasks
 
-See `task-dag.yaml` and `changes/runtime-v0-1/tasks.yaml`.
+The historical implementation tasks remain in `task-dag.yaml`. The v0.2 maintenance change is reviewed through its Git diff and automated tests; it did not create additional development task windows.
 
 ## Blockers and risks
 
-The YAML writer preserves readable data but does not round-trip comments. v0.1.1 avoids broad file rewriting and only writes the task DAG on explicit transitions.
+No implementation blocker. YAML comments are not round-tripped. Locks protect one canonical DAG only. Runtime does not detect actual agent liveness, execute evidence commands or prove the content of logs. Separate worktrees require explicit snapshot/handoff transfer.
 
 ## Next Manager action
 
-Use the Runtime on a real coordination project and retain findings as input to a deliberately scoped v0.2 proposal.
+Install the updated skill and dependency lockfile, verify its installed CLI, and push the reviewed change for repository review. Future project adoption should begin with `recover` and the migration procedure.

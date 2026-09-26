@@ -64,7 +64,7 @@ test("state transitions reject jumps and retain blocked provenance", async () =>
   await updateTaskStatus(root, "backend-01", "in_progress");
   await updateTaskStatus(root, "backend-01", "blocked", { blocker: "fixture blocker" });
   let dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").raw.blocked_from, "in_progress");
-  await updateTaskStatus(root, "backend-01", "ready");
+  await updateTaskStatus(root, "backend-01", "ready", { reason: "Blocker resolved; old writer stopped" });
   dag = await loadTaskDag(root); assert.equal(dag.byId.get("backend-01").raw.blocked_from, "in_progress"); assert.equal(dag.byId.get("backend-01").raw.blocker, undefined);
   await updateTaskStatus(root, "backend-01", "assigned"); await updateTaskStatus(root, "backend-01", "in_progress");
   await updateTaskStatus(root, "backend-01", "handoff"); await updateTaskStatus(root, "backend-01", "review"); await updateTaskStatus(root, "backend-01", "done");

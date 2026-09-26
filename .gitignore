@@ -1,3 +1,5 @@
 node_modules/
 __pycache__/
 *.pyc
+*.yaml.lock
+*.yaml.*.tmp

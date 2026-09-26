@@ -21,7 +21,7 @@ tasks:
     status: ready
     goal: Add project documentation.
     allowed_paths:
-      - docs/**
+      - docs/guides/**
     inputs: []
     outputs: []
     depends_on: []
